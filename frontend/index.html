@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+
+    <!-- 
+      ===============================================================
+      KUNCI UTAMA UNTUK ANIMASI KEYBOARD SUPER MULUS
+      ===============================================================
+      'interactive-widget=resizes-content' memberitahu browser mobile 
+      untuk menangani keyboard sebagai bagian dari layout, yang mengaktifkan
+      variabel CSS env(keyboard-inset-height).
+    -->
+    <meta 
+      name="viewport" 
+      content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" 
+    />
+
+    <title>Fafifa Kue - Aplikasi Stok Produksi</title>
+
+    <!-- Meta Tag untuk SEO, PWA, dan Theming Warna Browser -->
+    <meta 
+      name="description" 
+      content="Aplikasi manajemen untuk mencatat stok produksi harian Fafifa Kue." 
+    />
+    <meta name="theme-color" content="#F472B6" /> <!-- Warna pink untuk address bar -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Fafifa Kue" />
+    
+    <!-- Favicon & Manifest -->
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+
+    <!-- CSS Reset Modern -->
+    <style>
+      *, *::before, *::after {
+        box-sizing: border-box;
+      }
+      html, body, #root {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        -webkit-tap-highlight-color: transparent; /* Menghilangkan highlight biru saat disentuh */
+      }
+    </style>
+  </head>
+  
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
