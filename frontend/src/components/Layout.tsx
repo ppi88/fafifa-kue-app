@@ -1,6 +1,8 @@
 import { ReactNode } from "react";
-import Sidebar from "./Sidebar";
-import BottomNav from "./BottomNav";
+// Pastikan nama file adalah Sidebar.tsx
+import Sidebar from "./Sidebar"; 
+// Pastikan nama file adalah BottomNav.tsx
+import BottomNav from "./BottomNav"; 
 
 interface LayoutProps {
   children: ReactNode;
