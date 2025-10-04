@@ -1,7 +1,9 @@
+// PERBAIKAN DI FILE: frontend/src/components/Layout.tsx
+
 import { ReactNode } from "react";
-// Pastikan nama file adalah Sidebar.tsx
+// Import disesuaikan agar cocok 100% dengan nama file: Sidebar.tsx
 import Sidebar from "./Sidebar"; 
-// Pastikan nama file adalah BottomNav.tsx
+// Import disesuaikan agar cocok 100% dengan nama file: BottomNav.tsx
 import BottomNav from "./BottomNav"; 
 
 interface LayoutProps {
