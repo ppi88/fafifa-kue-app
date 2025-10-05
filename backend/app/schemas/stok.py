@@ -11,3 +11,4 @@ class StokInput(BaseModel):
 
     class Config:
         validate_by_name = True  # Pydantic v2
+        populate_by_name = True  # Agar alias bisa dipakai saat parsing
