@@ -7,8 +7,8 @@ import EditStokModal from "../components/EditStokModal";
 import { StokItem } from "../types/StokItem";
 import { getHari } from "../utils/dateUtils";
 
-// ✅ Ganti ke URL backend publik (bukan localhost)
-const API_URL = "https://fafifa-backend.replit.dev/api/stok/";
+// ✅ Ganti ke URL backend publik Replit
+const API_URL = "https://150ea736-1042-4394-a582-c0bbc1ffe5ff-00-3gao6m37amw6t.worf.replit.dev/api/stok/";
 
 export default function LaporanStokProduksi({ externalData }: { externalData?: StokItem[] }) {
   const [data, setData] = useState<StokItem[]>([]);
