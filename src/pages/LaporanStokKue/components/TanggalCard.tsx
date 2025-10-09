@@ -13,23 +13,21 @@ function getNextTanggal(currentTanggal: string) {
 
 interface Props {
   row: LaporanRecord;
-  totalPrev: number;
   onInputSisa: (row: LaporanRecord) => void;
   onHapus: (id: number, tanggal: string) => void;
   onUpdate: () => void;
 }
 
-export default function TanggalCard({ row, totalPrev, onInputSisa, onHapus, onUpdate }: Props) {
-  const { tanggal, items, sisa = {}, items_metadata = {}, makan_kue } = row;
+export default function TanggalCard({ row, onInputSisa, onHapus, onUpdate }: Props) {
+  const { tanggal, items, sisa = {}, items_metadata = {}, makan_kue = 0 } = row;
 
   const hitungTotal = (obj: Record<string, number> = {}) =>
     Object.values(obj).reduce((a, b) => a + (Number(b) || 0), 0);
 
-  const totalStok = hitungTotal(items); // Total Stok
-  const totalSisa = hitungTotal(sisa);  // Sisa Hari Ini
-  const makanKueValue = Number(makan_kue) || 0; // Makan Kue
+  const totalStok = hitungTotal(items);
+  const totalSisa = hitungTotal(sisa);
+  const makanKueValue = Number(makan_kue) || 0;
 
-  // Perbaikan rumus total terjual/terpakai hari ini
   const totalKeseluruhan = Math.max(0, totalStok - totalSisa - makanKueValue);
 
   const totalSisaKemarin = KUE_LIST.reduce(
@@ -48,11 +46,11 @@ export default function TanggalCard({ row, totalPrev, onInputSisa, onHapus, onUp
   const [value, setValue] = useState<string>("");
 
   // --- Bagian makan kue ---
-  const [makanKue, setMakanKue] = useState(makanKueValue);
-  const [editingMakanKue, setEditingMakanKue] = useState(false);
+  const [editMakanKue, setEditMakanKue] = useState(false);
+  const [makanKueInput, setMakanKueInput] = useState(makanKueValue);
 
   const simpanMakanKue = async () => {
-    if (isNaN(makanKue) || makanKue < 0) {
+    if (isNaN(makanKueInput) || makanKueInput < 0) {
       toast.error("Jumlah makan kue tidak valid.");
       return;
     }
@@ -60,7 +58,7 @@ export default function TanggalCard({ row, totalPrev, onInputSisa, onHapus, onUp
     try {
       await supabase
         .from("fafifa-costing")
-        .update({ makan_kue: makanKue })
+        .update({ makan_kue: makanKueInput })
         .eq("tanggal", tanggal);
       toast.dismiss();
       toast.success("✅ Jumlah makan kue tersimpan");
@@ -69,20 +67,22 @@ export default function TanggalCard({ row, totalPrev, onInputSisa, onHapus, onUp
       toast.dismiss();
       toast.error("Gagal menyimpan jumlah makan kue.");
     } finally {
-      setEditingMakanKue(false);
+      setEditMakanKue(false);
     }
   };
 
-  // --- Bagian simpanEdit dengan update sisa_kemarin & total stok di tanggal berikutnya ---
+  // --- Bagian simpanEdit (stok baru & sisa) ---
   const simpanEdit = async (e?: React.FocusEvent<HTMLInputElement>) => {
     if (e) e.preventDefault();
     if (!editing) return;
+
     const { type, key } = editing;
     const newValue = Number(value);
     if (isNaN(newValue) || newValue < 0) {
       toast.error("Nilai tidak valid.");
       return;
     }
+
     toast.loading("Menyimpan perubahan...");
     try {
       if (type === "stok_baru") {
@@ -102,14 +102,14 @@ export default function TanggalCard({ row, totalPrev, onInputSisa, onHapus, onUp
           toast.error(`Sisa tidak boleh melebihi total stok (${stokMax}).`);
           return;
         }
+
         const updatedSisa = { ...(row.sisa || {}), [key]: newValue };
-        // 1. Update sisa di tanggal saat ini
         await supabase
           .from("fafifa-costing")
           .update({ sisa: updatedSisa })
           .eq("tanggal", tanggal);
 
-        // 2. Update sisa_kemarin & total stok di tanggal berikutnya
+        // Update tanggal berikutnya
         const nextTanggal = getNextTanggal(tanggal);
         if (nextTanggal) {
           const { data: nextRows, error: nextError } = await supabase
@@ -124,28 +124,26 @@ export default function TanggalCard({ row, totalPrev, onInputSisa, onHapus, onUp
             if (!nextItemsMetadata[key]) nextItemsMetadata[key] = {};
             nextItemsMetadata[key].sisa_kemarin = newValue;
 
-            // Hitung ulang total stok di tanggal berikutnya
             const stokBaru = nextItemsMetadata[key].input_baru ?? 0;
             const totalStokBaru = Number(nextItemsMetadata[key].sisa_kemarin) + Number(stokBaru);
-            const nextItems = { ...(nextRow.items || {}) };
-            nextItems[key] = totalStokBaru;
+            const nextItems = { ...(nextRow.items || {}), [key]: totalStokBaru };
 
-            // Update items_metadata dan items di tanggal berikutnya
             await supabase
               .from("fafifa-costing")
               .update({
                 items_metadata: nextItemsMetadata,
-                items: nextItems
+                items: nextItems,
               })
               .eq("id", nextRow.id);
           }
         }
       }
+
       toast.dismiss();
       toast.success("✅ Perubahan tersimpan");
       onUpdate();
       setEditing(null);
-    } catch (err) {
+    } catch {
       toast.dismiss();
       toast.error("Gagal menyimpan ke cloud");
     }
@@ -158,12 +156,12 @@ export default function TanggalCard({ row, totalPrev, onInputSisa, onHapus, onUp
 
   return (
     <div className="border p-4 mb-4 rounded bg-white shadow-sm">
+      {/* Header tanggal dan tombol aksi */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-3 gap-3">
         <div className="flex-1 flex flex-col md:flex-row md:items-center gap-4">
           <p className="font-semibold whitespace-nowrap">Tanggal: {tanggal}</p>
         </div>
         <div className="flex gap-2">
-          {/* Tombol input sisa */}
           <button
             onClick={() => onInputSisa(row)}
             className="p-2 text-lg text-amber-600 hover:bg-amber-100 rounded-full"
@@ -171,7 +169,6 @@ export default function TanggalCard({ row, totalPrev, onInputSisa, onHapus, onUp
           >
             📦
           </button>
-          {/* Tombol hapus */}
           <button
             onClick={() => {
               if (confirm(`Hapus data tanggal ${tanggal}?`)) {
@@ -189,28 +186,23 @@ export default function TanggalCard({ row, totalPrev, onInputSisa, onHapus, onUp
       {/* Input Makan Kue */}
       <div className="flex items-center gap-2 mb-2">
         <span className="font-semibold">Makan Kue:</span>
-        {editingMakanKue ? (
+        {editMakanKue ? (
           <>
             <input
               type="number"
               min={0}
               className="w-20 border-b-2 border-gray-300 focus:border-blue-500 outline-none px-2 py-1"
-              value={makanKue}
-              onChange={(e) => setMakanKue(Number(e.target.value))}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") simpanMakanKue();
-              }}
+              value={makanKueInput}
+              onChange={(e) => setMakanKueInput(Number(e.target.value))}
+              onKeyDown={(e) => e.key === "Enter" && simpanMakanKue()}
             />
-            <button
-              onClick={simpanMakanKue}
-              className="px-2 py-1 bg-blue-600 text-white rounded"
-            >
+            <button onClick={simpanMakanKue} className="px-2 py-1 bg-blue-600 text-white rounded">
               Submit
             </button>
             <button
               onClick={() => {
-                setEditingMakanKue(false);
-                setMakanKue(makanKueValue);
+                setEditMakanKue(false);
+                setMakanKueInput(makanKueValue);
               }}
               className="px-2 py-1 bg-gray-300 text-gray-700 rounded"
             >
@@ -221,7 +213,7 @@ export default function TanggalCard({ row, totalPrev, onInputSisa, onHapus, onUp
           <>
             <span className="ml-2">{makanKueValue} pcs</span>
             <button
-              onClick={() => setEditingMakanKue(true)}
+              onClick={() => setEditMakanKue(true)}
               className="ml-2 p-1 text-blue-600 hover:bg-blue-100 rounded"
               title="Edit Makan Kue"
             >
@@ -231,6 +223,7 @@ export default function TanggalCard({ row, totalPrev, onInputSisa, onHapus, onUp
         )}
       </div>
 
+      {/* Tabel data stok */}
       <div className="grid grid-cols-5 font-semibold text-sm text-gray-600 mb-1 px-2 text-right">
         <span className="text-left">Jenis Kue</span>
         <span>Sisa Kemarin</span>
@@ -250,17 +243,13 @@ export default function TanggalCard({ row, totalPrev, onInputSisa, onHapus, onUp
           const editStokBaru = editing?.type === "stok_baru" && editing.key === k.key;
 
           return (
-            <div
-              key={k.key}
-              className="grid grid-cols-5 bg-gray-50 px-3 py-2 rounded items-center text-right"
-            >
+            <div key={k.key} className="grid grid-cols-5 bg-gray-50 px-3 py-2 rounded items-center text-right">
               <span className="text-left">{k.label}</span>
-              <span
-                className="text-gray-500 cursor-help"
-                title="Sisa dari hari sebelumnya."
-              >
+              <span className="text-gray-500 cursor-help" title="Sisa dari hari sebelumnya.">
                 {sisaKemarin}
               </span>
+
+              {/* Edit Stok Baru */}
               <span
                 className="cursor-pointer"
                 onDoubleClick={() => {
@@ -282,7 +271,10 @@ export default function TanggalCard({ row, totalPrev, onInputSisa, onHapus, onUp
                   stokBaru
                 )}
               </span>
+
               <span className="font-bold">{stokVal}</span>
+
+              {/* Edit Sisa */}
               <span
                 className="cursor-pointer"
                 onDoubleClick={() => {
@@ -317,11 +309,10 @@ export default function TanggalCard({ row, totalPrev, onInputSisa, onHapus, onUp
         </div>
       </div>
 
+      {/* Total bawah */}
       <div className="mt-4 border-t pt-2">
         <div className="grid grid-cols-2">
-          <span className="font-semibold">
-            Total Terjual/Terpakai Hari Ini:
-          </span>
+          <span className="font-semibold">Total Terjual/Terpakai Hari Ini:</span>
           <span className="text-right font-bold text-lg text-green-700">
             {totalKeseluruhan.toLocaleString("id-ID")} pcs
           </span>

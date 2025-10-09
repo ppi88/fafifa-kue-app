@@ -1,17 +1,22 @@
-import React, { useRef, useState } from "react";
+import { useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { updateSisaCloud } from "../../utils/supabaseStorage";
 import { KUE_LIST } from "../InputStokKue";
 import HeaderBar from "./components/HeaderBar";
 import SisaForm from "./components/SisaForm";
-import type { StokMap } from "./types";
+import type { StokMap } from "./types"; // pastikan file ini dibuat (lihat bawah)
 
 const InputSisaKue: React.FC<{
   onSuccess?: () => void;
   defaultTanggal?: string;
   defaultItems?: Record<string, number>;
   defaultSisa?: Record<string, number>;
-}> = ({ onSuccess, defaultTanggal = "", defaultItems = {}, defaultSisa = {} }) => {
+}> = ({
+  onSuccess,
+  defaultTanggal = "",
+  defaultItems = {},
+  defaultSisa = {},
+}) => {
   const [tanggal] = useState(defaultTanggal);
   const [stokAwal] = useState<Record<string, number>>(defaultItems);
   const [stok, setStok] = useState<StokMap>(() =>
@@ -32,12 +37,14 @@ const InputSisaKue: React.FC<{
     const val = stok[key] ?? 0;
     const max = stokAwal[key] ?? 0;
     if (val > max) {
-      toast.error(`Sisa ${KUE_LIST.find((k) => k.key === key)?.label} (${val}) melebihi stok awal (${max}).`);
+      toast.error(
+        `Sisa ${KUE_LIST.find((k) => k.key === key)?.label} (${val}) melebihi stok awal (${max}).`
+      );
       setTimeout(() => inputRefs.current[key]?.focus(), 0);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSaving(true);
     const toastId = toast.loading("Menyimpan data sisa...");
@@ -47,7 +54,9 @@ const InputSisaKue: React.FC<{
         const val = stok[kue.key] ?? 0;
         if (val > max) {
           toast.dismiss(toastId);
-          toast.error(`Sisa ${kue.label} (${val}) melebihi stok awal (${max}).`);
+          toast.error(
+            `Sisa ${kue.label} (${val}) melebihi stok awal (${max}).`
+          );
           setSaving(false);
           setTimeout(() => inputRefs.current[kue.key]?.focus(), 0);
           return;
@@ -57,7 +66,7 @@ const InputSisaKue: React.FC<{
       toast.dismiss(toastId);
       toast.success("✅ Data sisa berhasil diperbarui.");
       setSaving(false);
-      if (onSuccess) onSuccess();
+      onSuccess?.();
     } catch (err) {
       toast.dismiss(toastId);
       toast.error("🔴 Gagal memperbarui data sisa.");

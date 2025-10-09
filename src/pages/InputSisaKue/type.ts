@@ -1,3 +1,3 @@
-export interface StokMap {
-  [key: string]: number;
-}
+Cannot find module './types'
+Parameter 's' implicitly has an 'any' type
+Type 'null' is not assignable to type ...

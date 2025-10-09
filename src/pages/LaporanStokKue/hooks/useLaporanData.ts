@@ -5,32 +5,41 @@ import { deleteEntry } from "../../../utils/storage";
 import { deleteStokCloud } from "../../../utils/supabaseStorage";
 import type { LaporanRecord } from "../types";
 
+/**
+ * Hook untuk mengambil, memfilter, dan menghapus data laporan stok kue.
+ * Menggabungkan data cloud (Supabase) dan local storage (fallback/offline).
+ */
 export function useLaporanData() {
   const [data, setData] = useState<LaporanRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(true);
 
+  // --- Ambil data laporan ---
   const getData = async (filterDate?: string) => {
     setLoading(true);
-    let query = supabase
-      .from("fafifa-costing")
-      .select("*")
-      .order("tanggal", { ascending: false });
 
-    if (filterDate) {
-      query = query.eq('tanggal', filterDate);
-    }
+    try {
+      let query = supabase
+        .from("fafifa-costing")
+        .select("*")
+        .order("tanggal", { ascending: false });
 
-    const { data: res, error } = await query;
+      if (filterDate) query = query.eq("tanggal", filterDate);
 
-    if (error) {
-      toast.error("⚠️  Gagal mengambil data laporan.");
+      const { data: res, error } = await query;
+
+      if (error) throw error;
+
+      setData((res || []) as LaporanRecord[]);
+    } catch (err) {
+      console.error(err);
+      toast.error("⚠️ Gagal mengambil data laporan.");
       setData([]);
-    } else {
-      setData(res || []);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
+  // --- Hapus data laporan ---
   const hapusData = async (id: number, tanggal: string) => {
     if (!window.confirm(`Yakin hapus data tanggal ${tanggal}?`)) return;
 
@@ -40,18 +49,29 @@ export function useLaporanData() {
       .eq("id", id);
 
     if (error) {
-      toast.error("Gagal menghapus data");
+      toast.error("Gagal menghapus data dari cloud.");
       return;
     }
 
     try {
-      deleteEntry && deleteEntry(tanggal);
-      deleteStokCloud && deleteStokCloud(tanggal);
-    } catch (e) {}
+      // Hapus juga dari local storage dan Supabase Storage bila tersedia
+      await Promise.allSettled([
+        Promise.resolve(deleteEntry?.(tanggal)),
+        Promise.resolve(deleteStokCloud?.(tanggal)),
+      ]);
+    } catch {
+      // aman diabaikan
+    }
 
     setData((prev) => prev.filter((row) => row.id !== id));
-    toast.success("Data berhasil dihapus");
+    toast.success("🗑️ Data berhasil dihapus.");
   };
 
-  return { data, loading, getData, hapusData, setData };
+  return {
+    data,
+    loading,
+    getData,
+    hapusData,
+    setData,
+  };
 }
