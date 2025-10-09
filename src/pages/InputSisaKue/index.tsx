@@ -4,7 +4,7 @@ import { updateSisaCloud } from "../../utils/supabaseStorage";
 import { KUE_LIST } from "../InputStokKue";
 import HeaderBar from "./components/HeaderBar";
 import SisaForm from "./components/SisaForm";
-import type { StokMap } from "./types"; // pastikan file ini dibuat (lihat bawah)
+import type { StokMap } from "./type";
 
 const InputSisaKue: React.FC<{
   onSuccess?: () => void;
@@ -17,34 +17,38 @@ const InputSisaKue: React.FC<{
   defaultItems = {},
   defaultSisa = {},
 }) => {
-  const [tanggal] = useState(defaultTanggal);
+  const [tanggal] = useState<string>(defaultTanggal);
   const [stokAwal] = useState<Record<string, number>>(defaultItems);
   const [stok, setStok] = useState<StokMap>(() =>
-    KUE_LIST.reduce(
-      (acc, k) => ({ ...acc, [k.key]: defaultSisa[k.key] ?? 0 }),
-      {} as StokMap
-    )
+    KUE_LIST.reduce((acc: StokMap, k) => {
+      acc[k.key] = defaultSisa[k.key] ?? 0;
+      return acc;
+    }, {} as StokMap)
   );
-  const [saving, setSaving] = useState(false);
+
+  const [saving, setSaving] = useState<boolean>(false);
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
-  const handleChange = (key: string, raw: string) => {
+  const handleChange = (key: string, raw: string): void => {
     const val = raw === "" ? 0 : Math.max(0, Number(raw));
-    setStok((s) => ({ ...s, [key]: Number.isNaN(val) ? 0 : val }));
+    setStok((prev: StokMap) => ({
+      ...prev,
+      [key]: Number.isNaN(val) ? 0 : val,
+    }));
   };
 
-  const handleBlur = (key: string) => {
+  const handleBlur = (key: string): void => {
     const val = stok[key] ?? 0;
     const max = stokAwal[key] ?? 0;
     if (val > max) {
       toast.error(
-        `Sisa ${KUE_LIST.find((k) => k.key === key)?.label} (${val}) melebihi stok awal (${max}).`
+        `Sisa ${KUE_LIST.find((k) => k.key === key)?.label ?? key} (${val}) melebihi stok awal (${max}).`
       );
       setTimeout(() => inputRefs.current[key]?.focus(), 0);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
     setSaving(true);
     const toastId = toast.loading("Menyimpan data sisa...");
@@ -54,20 +58,20 @@ const InputSisaKue: React.FC<{
         const val = stok[kue.key] ?? 0;
         if (val > max) {
           toast.dismiss(toastId);
-          toast.error(
-            `Sisa ${kue.label} (${val}) melebihi stok awal (${max}).`
-          );
+          toast.error(`Sisa ${kue.label} (${val}) melebihi stok awal (${max}).`);
           setSaving(false);
           setTimeout(() => inputRefs.current[kue.key]?.focus(), 0);
           return;
         }
       }
+
       await updateSisaCloud(tanggal, stok);
       toast.dismiss(toastId);
       toast.success("✅ Data sisa berhasil diperbarui.");
       setSaving(false);
       onSuccess?.();
     } catch (err) {
+      console.error(err);
       toast.dismiss(toastId);
       toast.error("🔴 Gagal memperbarui data sisa.");
       setSaving(false);

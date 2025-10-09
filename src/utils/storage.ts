@@ -5,7 +5,8 @@ export type StokEntry = {
   id: number; // timestamp
   tanggal: string; // ISO yyyy-mm-dd
   items: StokMap;
-  createdAt: string; // ISO datetime
+  // Perbaikan: Mengubah 'createdAt' menjadi 'created_at' untuk konsistensi.
+  created_at: string; // ISO datetime
 };
 
 const LS_KEY = "stokKueFafifa_entries_v1";
@@ -14,7 +15,18 @@ export function loadEntries(): StokEntry[] {
   try {
     const raw = localStorage.getItem(LS_KEY);
     if (!raw) return [];
-    return JSON.parse(raw) as StokEntry[];
+    // Dalam kasus data lama di localStorage masih menggunakan 'createdAt', 
+    // kita melakukan konversi sederhana di sini untuk menghindari kegagalan parsing.
+    const parsedEntries = JSON.parse(raw);
+    
+    // Ini adalah langkah opsional tapi aman untuk migrasi data lama
+    const normalizedEntries = parsedEntries.map((entry: any) => ({
+        ...entry,
+        created_at: entry.created_at || entry.createdAt, // Prioritaskan created_at
+    })) as StokEntry[];
+
+    return normalizedEntries;
+
   } catch {
     return [];
   }

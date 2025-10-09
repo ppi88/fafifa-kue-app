@@ -6,6 +6,7 @@ interface RecapListProps {
   onDelete: (id: number, tanggal: string) => void;
 }
 
+// Format tanggal dengan nama hari dan bulan pendek
 const fmtTanggal = (iso: string) =>
   new Date(iso).toLocaleDateString("id-ID", {
     weekday: "long",
@@ -16,7 +17,11 @@ const fmtTanggal = (iso: string) =>
 
 export default function RecapList({ entries, onDelete }: RecapListProps) {
   if (!entries || entries.length === 0)
-    return <p className="text-gray-500 italic">Belum ada data laporan stok kue.</p>;
+    return (
+      <p className="text-gray-500 italic">
+        Belum ada data laporan stok kue.
+      </p>
+    );
 
   return (
     <div>
@@ -34,7 +39,10 @@ export default function RecapList({ entries, onDelete }: RecapListProps) {
                 {fmtTanggal(e.tanggal)}
               </div>
               <div className="text-xs text-gray-500">
-                Disimpan: {new Date(e.created_at).toLocaleString("id-ID")}
+                Disimpan:{" "}
+                {e.created_at
+                  ? new Date(e.created_at).toLocaleString("id-ID")
+                  : "-"}
               </div>
             </div>
 

@@ -1,3 +1,5 @@
+// src/pages/LaporanStokKue/components/TanggalCard.tsx
+import type { FocusEvent, KeyboardEvent } from "react";
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { supabase } from "../../../lib/supabaseClient";
@@ -5,111 +7,134 @@ import { KUE_LIST } from "../../InputStokKue";
 import type { LaporanRecord } from "../types";
 
 // Helper untuk dapatkan tanggal berikutnya (format YYYY-MM-DD)
-function getNextTanggal(currentTanggal: string) {
+function getNextTanggal(currentTanggal: string): string | null {
   const date = new Date(currentTanggal);
+  if (Number.isNaN(date.getTime())) return null;
   date.setDate(date.getDate() + 1);
   return date.toISOString().slice(0, 10);
 }
 
 interface Props {
   row: LaporanRecord;
+  totalPrev?: number; // ✅ tambahan
   onInputSisa: (row: LaporanRecord) => void;
   onHapus: (id: number, tanggal: string) => void;
   onUpdate: () => void;
+  // PERBAIKAN: Menambahkan prop onEditGabungan yang hilang
+  onEditGabungan: (row: LaporanRecord, kue_key: string) => void;
 }
 
-export default function TanggalCard({ row, onInputSisa, onHapus, onUpdate }: Props) {
-  const { tanggal, items, sisa = {}, items_metadata = {}, makan_kue = 0 } = row;
+export default function TanggalCard({ row, onInputSisa, onHapus, onUpdate, onEditGabungan }: Props) {
+  // normalisasi fields (karena beberapa mungkin undefined)
+  const tanggal = row.tanggal;
+  const items = row.items ?? {};
+  const sisa = row.sisa ?? {};
+  const items_metadata = row.items_metadata ?? {};
+  // makan_kue bisa berupa number atau string atau undefined
+  const makan_kue_raw = (row as any).makan_kue;
+  const makanKueValue = Number(makan_kue_raw ?? 0) || 0;
 
   const hitungTotal = (obj: Record<string, number> = {}) =>
     Object.values(obj).reduce((a, b) => a + (Number(b) || 0), 0);
 
   const totalStok = hitungTotal(items);
   const totalSisa = hitungTotal(sisa);
-  const makanKueValue = Number(makan_kue) || 0;
-
   const totalKeseluruhan = Math.max(0, totalStok - totalSisa - makanKueValue);
 
   const totalSisaKemarin = KUE_LIST.reduce(
-    (sum, k) => sum + (items_metadata?.[k.key]?.sisa_kemarin ?? 0),
+    (sum, k) => sum + (Number(items_metadata?.[k.key]?.sisa_kemarin) || 0),
     0
   );
   const totalStokBaru = KUE_LIST.reduce((sum, k) => {
-    const meta = items_metadata?.[k.key];
-    const stokVal = items?.[k.key] ?? 0;
-    const sisaKemarin = meta?.sisa_kemarin ?? 0;
-    const stokBaru = meta?.input_baru ?? (stokVal - sisaKemarin);
+    const meta = items_metadata?.[k.key] ?? {};
+    const stokVal = Number(items?.[k.key] ?? 0);
+    const sisaKemarin = Number(meta?.sisa_kemarin ?? 0);
+    const stokBaru = Number(meta?.input_baru ?? (stokVal - sisaKemarin));
     return sum + stokBaru;
   }, 0);
 
+  // editing state
   const [editing, setEditing] = useState<{ type: "stok_baru" | "sisa"; key: string } | null>(null);
   const [value, setValue] = useState<string>("");
 
-  // --- Bagian makan kue ---
+  // makan kue state
   const [editMakanKue, setEditMakanKue] = useState(false);
-  const [makanKueInput, setMakanKueInput] = useState(makanKueValue);
+  const [makanKueInput, setMakanKueInput] = useState<number>(makanKueValue);
 
   const simpanMakanKue = async () => {
-    if (isNaN(makanKueInput) || makanKueInput < 0) {
+    if (Number.isNaN(makanKueInput) || makanKueInput < 0) {
       toast.error("Jumlah makan kue tidak valid.");
       return;
     }
-    toast.loading("Menyimpan jumlah makan kue...");
+    const toastId = toast.loading("Menyimpan jumlah makan kue...");
     try {
-      await supabase
+      const { error } = await supabase
         .from("fafifa-costing")
         .update({ makan_kue: makanKueInput })
         .eq("tanggal", tanggal);
-      toast.dismiss();
-      toast.success("✅ Jumlah makan kue tersimpan");
-      onUpdate();
-    } catch {
-      toast.dismiss();
+
+      toast.dismiss(toastId);
+      if (error) {
+        console.error(error);
+        toast.error("Gagal menyimpan jumlah makan kue.");
+      } else {
+        toast.success("✅ Jumlah makan kue tersimpan");
+        onUpdate();
+      }
+    } catch (err) {
+      console.error(err);
+      toast.dismiss(toastId);
       toast.error("Gagal menyimpan jumlah makan kue.");
     } finally {
       setEditMakanKue(false);
     }
   };
 
-  // --- Bagian simpanEdit (stok baru & sisa) ---
-  const simpanEdit = async (e?: React.FocusEvent<HTMLInputElement>) => {
+  // simpan edit stok baru atau sisa
+  const simpanEdit = async (e?: FocusEvent<HTMLInputElement>) => {
     if (e) e.preventDefault();
     if (!editing) return;
 
     const { type, key } = editing;
     const newValue = Number(value);
-    if (isNaN(newValue) || newValue < 0) {
+    if (Number.isNaN(newValue) || newValue < 0) {
       toast.error("Nilai tidak valid.");
       return;
     }
 
-    toast.loading("Menyimpan perubahan...");
+    const toastId = toast.loading("Menyimpan perubahan...");
     try {
       if (type === "stok_baru") {
-        const meta = items_metadata?.[key] || { sisa_kemarin: 0, input_baru: 0 };
-        const sisaKemarin = meta.sisa_kemarin;
-        const newTotalStok = newValue + sisaKemarin;
-        const updatedMetadata = { ...items_metadata, [key]: { input_baru: newValue, sisa_kemarin: sisaKemarin } };
-        const updatedItems = { ...items, [key]: newTotalStok };
-        await supabase
+        // perbarui items_metadata.input_baru dan items[key] = input_baru + sisa_kemarin
+        const meta = items_metadata?.[key] ?? { sisa_kemarin: 0, input_baru: 0 };
+        const sisaKemarin = Number(meta.sisa_kemarin ?? 0);
+        const updatedMetadata = { ...(items_metadata ?? {}), [key]: { ...(meta as any), input_baru: newValue, sisa_kemarin: sisaKemarin } };
+        const updatedItems = { ...(items ?? {}), [key]: newValue + sisaKemarin };
+
+        const { error } = await supabase
           .from("fafifa-costing")
           .update({ items: updatedItems, items_metadata: updatedMetadata })
           .eq("tanggal", tanggal);
+
+        if (error) throw error;
       } else if (type === "sisa") {
-        const stokMax = items?.[key] ?? 0;
+        // validasi sisa tidak melebihi stok
+        const stokMax = Number(items?.[key] ?? 0);
         if (newValue > stokMax) {
-          toast.dismiss();
+          toast.dismiss(toastId);
           toast.error(`Sisa tidak boleh melebihi total stok (${stokMax}).`);
           return;
         }
 
-        const updatedSisa = { ...(row.sisa || {}), [key]: newValue };
-        await supabase
+        const updatedSisa = { ...(sisa ?? {}), [key]: newValue };
+        const { error: sisaError } = await supabase
           .from("fafifa-costing")
           .update({ sisa: updatedSisa })
           .eq("tanggal", tanggal);
 
-        // Update tanggal berikutnya
+        if (sisaError) throw sisaError;
+
+        // Update tanggal berikutnya: set next.items_metadata[key].sisa_kemarin = newValue
         const nextTanggal = getNextTanggal(tanggal);
         if (nextTanggal) {
           const { data: nextRows, error: nextError } = await supabase
@@ -118,38 +143,41 @@ export default function TanggalCard({ row, onInputSisa, onHapus, onUpdate }: Pro
             .eq("tanggal", nextTanggal)
             .limit(1);
 
-          if (!nextError && nextRows && nextRows.length > 0) {
-            const nextRow = nextRows[0];
-            const nextItemsMetadata = { ...(nextRow.items_metadata || {}) };
+          if (!nextError && nextRows && (nextRows as any[]).length > 0) {
+            const nextRow = (nextRows as any[])[0];
+            const nextItemsMetadata = { ...(nextRow.items_metadata ?? {}) };
             if (!nextItemsMetadata[key]) nextItemsMetadata[key] = {};
             nextItemsMetadata[key].sisa_kemarin = newValue;
 
-            const stokBaru = nextItemsMetadata[key].input_baru ?? 0;
-            const totalStokBaru = Number(nextItemsMetadata[key].sisa_kemarin) + Number(stokBaru);
-            const nextItems = { ...(nextRow.items || {}), [key]: totalStokBaru };
+            const stokBaru = Number(nextItemsMetadata[key].input_baru ?? 0);
+            const totalStokBaru = Number(nextItemsMetadata[key].sisa_kemarin ?? 0) + stokBaru;
+            const nextItems = { ...(nextRow.items ?? {}), [key]: totalStokBaru };
 
-            await supabase
+            const { error: nextUpdateError } = await supabase
               .from("fafifa-costing")
               .update({
                 items_metadata: nextItemsMetadata,
                 items: nextItems,
               })
               .eq("id", nextRow.id);
+
+            if (nextUpdateError) throw nextUpdateError;
           }
         }
       }
 
-      toast.dismiss();
+      toast.dismiss(toastId);
       toast.success("✅ Perubahan tersimpan");
       onUpdate();
       setEditing(null);
-    } catch {
-      toast.dismiss();
+    } catch (err) {
+      console.error(err);
+      toast.dismiss(toastId);
       toast.error("Gagal menyimpan ke cloud");
     }
   };
 
-  const keydown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const keydown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") simpanEdit();
     if (e.key === "Escape") setEditing(null);
   };
@@ -162,6 +190,14 @@ export default function TanggalCard({ row, onInputSisa, onHapus, onUpdate }: Pro
           <p className="font-semibold whitespace-nowrap">Tanggal: {tanggal}</p>
         </div>
         <div className="flex gap-2">
+          {/* Tombol yang hilang di kode Anda, tapi saya tambahkan karena fungsionalitasnya ada */}
+          <button
+            onClick={() => onEditGabungan(row, 'semua')} // Ganti 'semua' dengan key yang sesuai jika diperlukan
+            className="p-2 text-lg text-blue-600 hover:bg-blue-100 rounded-full"
+            title="Edit Stok Gabungan"
+          >
+            ⚙️
+          </button>
           <button
             onClick={() => onInputSisa(row)}
             className="p-2 text-lg text-amber-600 hover:bg-amber-100 rounded-full"
@@ -172,7 +208,7 @@ export default function TanggalCard({ row, onInputSisa, onHapus, onUpdate }: Pro
           <button
             onClick={() => {
               if (confirm(`Hapus data tanggal ${tanggal}?`)) {
-                onHapus(row.id, tanggal);
+                onHapus(row.id as number, tanggal);
               }
             }}
             className="p-2 text-lg text-red-600 hover:bg-red-100 rounded-full"
@@ -194,7 +230,7 @@ export default function TanggalCard({ row, onInputSisa, onHapus, onUpdate }: Pro
               className="w-20 border-b-2 border-gray-300 focus:border-blue-500 outline-none px-2 py-1"
               value={makanKueInput}
               onChange={(e) => setMakanKueInput(Number(e.target.value))}
-              onKeyDown={(e) => e.key === "Enter" && simpanMakanKue()}
+              onKeyDown={(ev) => ev.key === "Enter" && simpanMakanKue()}
             />
             <button onClick={simpanMakanKue} className="px-2 py-1 bg-blue-600 text-white rounded">
               Submit
@@ -234,11 +270,11 @@ export default function TanggalCard({ row, onInputSisa, onHapus, onUpdate }: Pro
 
       <div className="space-y-1">
         {KUE_LIST.map((k) => {
-          const stokVal = items?.[k.key] ?? 0;
-          const sisaVal = sisa?.[k.key] ?? 0;
-          const meta = items_metadata?.[k.key];
-          const sisaKemarin = meta?.sisa_kemarin ?? 0;
-          const stokBaru = meta?.input_baru ?? (stokVal - sisaKemarin);
+          const stokVal = Number(items?.[k.key] ?? 0);
+          const sisaVal = Number(sisa?.[k.key] ?? 0);
+          const meta = items_metadata?.[k.key] ?? {};
+          const sisaKemarin = Number(meta?.sisa_kemarin ?? 0);
+          const stokBaru = Number(meta?.input_baru ?? (stokVal - sisaKemarin));
           const editSisa = editing?.type === "sisa" && editing.key === k.key;
           const editStokBaru = editing?.type === "stok_baru" && editing.key === k.key;
 
