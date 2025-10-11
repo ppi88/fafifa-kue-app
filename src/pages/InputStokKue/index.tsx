@@ -1,10 +1,11 @@
+import { useEffect } from "react";
 import HeaderBar from "./components/HeaderBar";
 import StockForm from "./components/StockForm";
 import RecapList from "./components/RecapList";
 import { useInputStok } from "./hooks/useInputStok";
-import type { LaporanRecord } from "./types"; // pastikan file types.ts sudah sesuai
+import type { LaporanRecord } from "./types";
 
-// Daftar kue diekspor dari sini agar tetap menjadi satu sumber kebenaran
+// ✅ 1. DEFINISIKAN DAN EKSPOR KUE_LIST DI SINI. Ini adalah sumber kebenaran.
 export const KUE_LIST = [
   { key: "boluKukus", label: "Bolu Kukus" },
   { key: "rotiGabin", label: "Roti Gabin" },
@@ -15,14 +16,22 @@ export const KUE_LIST = [
 ];
 
 interface InputStokKueProps {
+  defaultTanggal?: string;
+  defaultItems?: Record<string, number>;
   onSuccess?: () => void;
+  isModalMode?: boolean;
 }
 
-export default function InputStokKue({ onSuccess }: InputStokKueProps) {
-  // Panggil custom hook untuk mendapatkan semua state dan handler
+export default function InputStokKue({
+  defaultTanggal,
+  defaultItems,
+  onSuccess,
+  isModalMode = false,
+}: InputStokKueProps) {
   const {
     tanggal,
     stok,
+    sisaKemarin,
     entries,
     isOnline,
     saving,
@@ -30,28 +39,43 @@ export default function InputStokKue({ onSuccess }: InputStokKueProps) {
     handleChange,
     handleSubmit,
     handleDelete,
+    applyDefaultItems,
   } = useInputStok({ onSuccess });
 
-  // Pastikan entries bertipe LaporanRecord[]
+  useEffect(() => {
+    if (defaultTanggal) setTanggal(defaultTanggal);
+    if (defaultItems && applyDefaultItems) applyDefaultItems(defaultItems);
+  }, [defaultTanggal, defaultItems, setTanggal, applyDefaultItems]);
+
   const laporanEntries: LaporanRecord[] = entries ?? [];
+
+  if (isModalMode) {
+    return (
+      <StockForm
+        tanggal={tanggal}
+        stok={stok}
+        sisaKemarin={sisaKemarin}
+        saving={saving}
+        onTanggalChange={setTanggal}
+        onItemChange={handleChange}
+        onSubmit={handleSubmit}
+      />
+    );
+  }
 
   return (
     <div className="bg-gray-50 flex items-start justify-center p-4 md:p-6">
       <div className="w-full max-w-4xl bg-white shadow-lg rounded-2xl p-6">
-        {/* Header status online/offline */}
         <HeaderBar isOnline={isOnline} />
-
-        {/* Form input stok */}
         <StockForm
           tanggal={tanggal}
           stok={stok}
+          sisaKemarin={sisaKemarin}
           saving={saving}
           onTanggalChange={setTanggal}
           onItemChange={handleChange}
           onSubmit={handleSubmit}
         />
-
-        {/* Daftar rekap stok */}
         <RecapList entries={laporanEntries} onDelete={handleDelete} />
       </div>
     </div>

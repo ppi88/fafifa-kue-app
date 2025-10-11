@@ -1,25 +1,31 @@
 import { KUE_LIST } from "../index";
-import type { StokMap } from "../types";
 
 interface StockFormProps {
   tanggal: string;
-  stok: StokMap;
+  stok?: Record<string, number>; // Optional untuk mencegah undefined
+  sisaKemarin?: Record<string, number>; // Optional untuk mencegah undefined
   saving: boolean;
-  onTanggalChange: (t: string) => void;
-  onItemChange: (key: string, val: string) => void;
-  onSubmit: (e: React.FormEvent) => void;
+  onTanggalChange: (tgl: string) => void;
+  onItemChange: (key: string, value: number) => void;
+  onSubmit: () => void;
 }
 
 export default function StockForm({
   tanggal,
-  stok,
+  stok = {}, // ✅ Fallback default agar tidak undefined
+  sisaKemarin = {}, // ✅ Fallback default agar tidak undefined
   saving,
   onTanggalChange,
   onItemChange,
   onSubmit,
 }: StockFormProps) {
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit();
+  };
+
   return (
-    <form onSubmit={onSubmit} className="space-y-6 mb-6">
+    <form onSubmit={handleSubmit} className="space-y-6 mb-6">
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Tanggal
@@ -34,31 +40,41 @@ export default function StockForm({
       </div>
 
       <div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center font-semibold text-gray-700 mb-2">
-          <div>Jenis Kue</div>
-          <div className="md:col-span-2 text-right">
-            Jumlah (tidak boleh &gt; stok awal pada mode sisa)
-          </div>
+        <div className="grid grid-cols-4 font-semibold text-gray-700 mb-2 text-center">
+          <div className="text-left">Jenis Kue</div>
+          <div>Sisa Kemarin</div>
+          <div>Stok Baru</div>
+          <div>Total Stok</div>
         </div>
         <div className="space-y-2">
-          {KUE_LIST.map((k) => (
-            <div
-              key={k.key}
-              className="grid grid-cols-2 md:grid-cols-3 gap-3 items-center py-2 border-b last:border-b-0"
-            >
-              <div className="text-gray-800">{k.label}</div>
-              <div className="md:col-span-2 flex justify-end md:justify-start">
-                <input
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  value={String(stok[k.key] ?? 0)}
-                  onChange={(e) => onItemChange(k.key, e.target.value)}
-                  className="w-28 text-right border rounded-lg px-2 py-1"
-                  min={0}
-                />
+          {KUE_LIST.map((kue) => {
+            const sisaKemarinVal = sisaKemarin?.[kue.key] ?? 0;
+            const stokBaruVal = stok?.[kue.key] ?? 0;
+            const totalStok = sisaKemarinVal + stokBaruVal;
+
+            return (
+              <div
+                key={kue.key}
+                className="grid grid-cols-4 items-center py-2 border-b last:border-b-0"
+              >
+                <div className="text-gray-800 text-left">{kue.label}</div>
+                <div className="text-center text-gray-600">{sisaKemarinVal}</div>
+                <div className="flex justify-center">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={stokBaruVal === 0 ? "" : stokBaruVal}
+                    onChange={(e) => onItemChange(kue.key, Number(e.target.value))}
+                    className="w-24 text-right border rounded-lg px-2 py-1"
+                    min={0}
+                    placeholder="0"
+                  />
+                </div>
+                <div className="text-center font-bold text-gray-800">{totalStok}</div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -68,7 +84,7 @@ export default function StockForm({
           disabled={saving}
           className={`flex items-center gap-2 ${
             saving ? "bg-blue-400 cursor-wait" : "bg-blue-600 hover:bg-blue-700"
-          } text-white px-5 py-2 rounded-lg shadow`}
+          } text-white px-5 py-2 rounded-lg shadow transition-colors`}
         >
           {saving && (
             <svg
@@ -92,7 +108,7 @@ export default function StockForm({
               ></path>
             </svg>
           )}
-          {saving ? "Menyimpan..." : "💾 Simpan"}
+          {saving ? "Menyimpan..." : "💾 Simpan Stok"}
         </button>
       </div>
     </form>

@@ -1,9 +1,11 @@
+// src/pages/LaporanStokKue/components/ModalInput.tsx (Versi Bersih & Siap Pakai)
+
 import { Suspense, lazy, useEffect } from "react";
 import type { LaporanRecord } from "../types";
 
-// ✅ Path disesuaikan ke struktur folder project
+// Pastikan path ke file komponen form sudah benar
 const LazyInputStokKue = lazy(() => import("../../InputStokKue"));
-const LazyInputSisaKue = lazy(() => import("../../InputSisaKue"));
+const LazyInputSisaForm = lazy(() => import("../../InputSisaKue"));
 
 interface ModalProps {
   type: "stok" | "sisa" | null;
@@ -13,12 +15,6 @@ interface ModalProps {
   onSuccess: () => void;
 }
 
-/**
- * 🔹 ModalInput Component
- * - Menampilkan form input stok atau sisa kue secara dinamis.
- * - Menggunakan React.lazy untuk optimasi (lazy loading).
- * - Dapat ditutup dengan tombol ESC atau klik di luar modal.
- */
 export default function ModalInput({
   type,
   visible,
@@ -26,7 +22,6 @@ export default function ModalInput({
   selected,
   onSuccess,
 }: ModalProps) {
-  // 🔸 Tutup modal saat tekan ESC
   useEffect(() => {
     if (!visible) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -36,49 +31,46 @@ export default function ModalInput({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [visible, onClose]);
 
-  // 🔸 Tidak render modal jika belum visible
   if (!visible) return null;
 
-  // 🔸 Tentukan judul modal berdasarkan tipe
   const title =
     type === "stok"
-      ? "➕ Tambah Stok Kue Baru"
-      : `📦 Input Sisa Kue (${selected?.tanggal || "-"})`;
+      ? "➕ Input Stok Kue Baru"
+      : `📦 Input Sisa Kue (Tanggal: ${selected?.tanggal || "..."})`;
 
   return (
     <div
-      className="fixed inset-0 bg-black/50 flex items-center justify-center p-2 z-50"
+      className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50"
       onClick={onClose}
     >
       <div
-        className="relative bg-white w-full max-w-3xl rounded-xl shadow-lg flex flex-col max-h-[90vh]"
+        className="relative bg-white w-full max-w-4xl rounded-xl shadow-2xl flex flex-col max-h-[95vh]"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* 🔹 Tombol Tutup */}
         <button
           onClick={onClose}
-          className="absolute top-3 right-4 text-gray-500 hover:text-red-600 text-2xl z-10"
+          className="absolute top-4 right-4 text-gray-400 hover:text-red-500 text-3xl z-10"
           aria-label="Tutup Modal"
         >
           &times;
         </button>
 
-        {/* 🔹 Header */}
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-700">{title}</h2>
+        <div className="p-5 border-b">
+          <h2 className="text-xl font-semibold text-gray-800">{title}</h2>
         </div>
 
-        {/* 🔹 Body - lazy load form */}
-        <div className="overflow-y-auto p-4 md:p-6 flex-1">
-          <Suspense fallback={<p className="text-center p-8">Memuat form...</p>}>
+        <div className="overflow-y-auto p-6 flex-1">
+          <Suspense fallback={<div className="text-center p-10">Memuat form...</div>}>
             {type === "stok" ? (
-              // 🔸 Input Stok Kue
-              <LazyInputStokKue onSuccess={onSuccess} />
+              <LazyInputStokKue
+                key="form-stok"
+                onSuccess={onSuccess}
+                isModalMode={true}
+              />
             ) : (
-              // 🔸 Input Sisa Kue
-              <LazyInputSisaKue
+              <LazyInputSisaForm
+                key="form-sisa"
                 defaultTanggal={selected?.tanggal ?? ""}
-                defaultItems={selected?.items ?? {}}
                 onSuccess={onSuccess}
               />
             )}

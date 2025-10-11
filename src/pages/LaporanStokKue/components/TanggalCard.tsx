@@ -1,266 +1,200 @@
-// src/pages/LaporanStokKue/components/TanggalCard.tsx
 import type { FocusEvent, KeyboardEvent } from "react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import { supabase } from "../../../lib/supabaseClient";
 import { KUE_LIST } from "../../InputStokKue";
 import type { LaporanRecord } from "../types";
 
-// Helper untuk dapatkan tanggal berikutnya (format YYYY-MM-DD)
+// ✅ FIX: Perhitungan tanggal berikutnya
 function getNextTanggal(currentTanggal: string): string | null {
+  if (!currentTanggal) return null;
   const date = new Date(currentTanggal);
   if (Number.isNaN(date.getTime())) return null;
+
   date.setDate(date.getDate() + 1);
-  return date.toISOString().slice(0, 10);
+  return date.toISOString().split("T")[0];
 }
 
 interface Props {
   row: LaporanRecord;
-  totalPrev?: number; // ✅ tambahan
   onInputSisa: (row: LaporanRecord) => void;
   onHapus: (id: number, tanggal: string) => void;
   onUpdate: () => void;
-  // PERBAIKAN: Menambahkan prop onEditGabungan yang hilang
-  onEditGabungan: (row: LaporanRecord, kue_key: string) => void;
 }
 
-export default function TanggalCard({ row, onInputSisa, onHapus, onUpdate, onEditGabungan }: Props) {
-  // normalisasi fields (karena beberapa mungkin undefined)
+export default function TanggalCard({ row, onInputSisa, onHapus, onUpdate }: Props) {
   const tanggal = row.tanggal;
   const items = row.items ?? {};
   const sisa = row.sisa ?? {};
   const items_metadata = row.items_metadata ?? {};
-  // makan_kue bisa berupa number atau string atau undefined
-  const makan_kue_raw = (row as any).makan_kue;
-  const makanKueValue = Number(makan_kue_raw ?? 0) || 0;
 
-  const hitungTotal = (obj: Record<string, number> = {}) =>
-    Object.values(obj).reduce((a, b) => a + (Number(b) || 0), 0);
-
-  const totalStok = hitungTotal(items);
-  const totalSisa = hitungTotal(sisa);
-  const totalKeseluruhan = Math.max(0, totalStok - totalSisa - makanKueValue);
-
-  const totalSisaKemarin = KUE_LIST.reduce(
-    (sum, k) => sum + (Number(items_metadata?.[k.key]?.sisa_kemarin) || 0),
-    0
-  );
-  const totalStokBaru = KUE_LIST.reduce((sum, k) => {
-    const meta = items_metadata?.[k.key] ?? {};
-    const stokVal = Number(items?.[k.key] ?? 0);
-    const sisaKemarin = Number(meta?.sisa_kemarin ?? 0);
-    const stokBaru = Number(meta?.input_baru ?? (stokVal - sisaKemarin));
-    return sum + stokBaru;
-  }, 0);
-
-  // editing state
   const [editing, setEditing] = useState<{ type: "stok_baru" | "sisa"; key: string } | null>(null);
   const [value, setValue] = useState<string>("");
 
-  // makan kue state
-  const [editMakanKue, setEditMakanKue] = useState(false);
-  const [makanKueInput, setMakanKueInput] = useState<number>(makanKueValue);
+  useEffect(() => {
+    if (!editing) setValue("");
+  }, [editing]);
 
-  const simpanMakanKue = async () => {
-    if (Number.isNaN(makanKueInput) || makanKueInput < 0) {
-      toast.error("Jumlah makan kue tidak valid.");
-      return;
-    }
-    const toastId = toast.loading("Menyimpan jumlah makan kue...");
-    try {
-      const { error } = await supabase
-        .from("fafifa-costing")
-        .update({ makan_kue: makanKueInput })
-        .eq("tanggal", tanggal);
+  // ✅ TAMBAHAN: Menghitung total untuk setiap kolom
+  const calculateTotals = () => {
+    let totalSisaKemarin = 0;
+    let totalStokBaru = 0;
+    let totalStok = 0;
+    let totalSisaHariIni = 0;
 
-      toast.dismiss(toastId);
-      if (error) {
-        console.error(error);
-        toast.error("Gagal menyimpan jumlah makan kue.");
-      } else {
-        toast.success("✅ Jumlah makan kue tersimpan");
-        onUpdate();
-      }
-    } catch (err) {
-      console.error(err);
-      toast.dismiss(toastId);
-      toast.error("Gagal menyimpan jumlah makan kue.");
-    } finally {
-      setEditMakanKue(false);
-    }
+    KUE_LIST.forEach((kue) => {
+      const meta = items_metadata?.[kue.key] ?? {};
+      const sisaKemarin = Number(meta?.sisa_kemarin ?? 0);
+      const stokBaru = Number(meta?.input_baru ?? 0);
+      const totalStokItem = Number(items?.[kue.key] ?? sisaKemarin + stokBaru);
+      const sisaHariIni = Number(sisa?.[kue.key] ?? 0);
+
+      totalSisaKemarin += sisaKemarin;
+      totalStokBaru += stokBaru;
+      totalStok += totalStokItem;
+      totalSisaHariIni += sisaHariIni;
+    });
+
+    return {
+      totalSisaKemarin,
+      totalStokBaru,
+      totalStok,
+      totalSisaHariIni
+    };
   };
 
-  // simpan edit stok baru atau sisa
+  const totals = calculateTotals();
+
   const simpanEdit = async (e?: FocusEvent<HTMLInputElement>) => {
     if (e) e.preventDefault();
     if (!editing) return;
 
     const { type, key } = editing;
     const newValue = Number(value);
-    if (Number.isNaN(newValue) || newValue < 0) {
-      toast.error("Nilai tidak valid.");
+    if (value.trim() === "" || isNaN(newValue) || newValue < 0) {
+      toast.error("Nilai tidak valid");
       return;
     }
 
-    const toastId = toast.loading("Menyimpan perubahan...");
+    const toastId = toast.loading("🔄 Menyimpan perubahan...");
+
     try {
       if (type === "stok_baru") {
-        // perbarui items_metadata.input_baru dan items[key] = input_baru + sisa_kemarin
-        const meta = items_metadata?.[key] ?? { sisa_kemarin: 0, input_baru: 0 };
-        const sisaKemarin = Number(meta.sisa_kemarin ?? 0);
-        const updatedMetadata = { ...(items_metadata ?? {}), [key]: { ...(meta as any), input_baru: newValue, sisa_kemarin: sisaKemarin } };
-        const updatedItems = { ...(items ?? {}), [key]: newValue + sisaKemarin };
+        const meta = items_metadata?.[key] ?? { sisa_kemarin: 0 };
+        const sisaKemarin = Number(meta?.sisa_kemarin ?? 0);
+
+        const updatedMetadata = {
+          ...(items_metadata ?? {}),
+          [key]: { ...meta, input_baru: newValue },
+        };
+
+        const updatedItems = {
+          ...(items ?? {}),
+          [key]: sisaKemarin + newValue,
+        };
 
         const { error } = await supabase
-          .from("fafifa-costing")
-          .update({ items: updatedItems, items_metadata: updatedMetadata })
+          .from("fafifa_costing")
+          .update({
+            items_metadata: updatedMetadata,
+            items: updatedItems,
+          })
           .eq("tanggal", tanggal);
 
         if (error) throw error;
-      } else if (type === "sisa") {
-        // validasi sisa tidak melebihi stok
+      }
+
+      if (type === "sisa") {
         const stokMax = Number(items?.[key] ?? 0);
         if (newValue > stokMax) {
           toast.dismiss(toastId);
-          toast.error(`Sisa tidak boleh melebihi total stok (${stokMax}).`);
+          toast.error(`❌ Sisa tidak boleh melebihi stok (${stokMax})`);
           return;
         }
 
         const updatedSisa = { ...(sisa ?? {}), [key]: newValue };
+
         const { error: sisaError } = await supabase
-          .from("fafifa-costing")
+          .from("fafifa_costing")
           .update({ sisa: updatedSisa })
           .eq("tanggal", tanggal);
 
         if (sisaError) throw sisaError;
 
-        // Update tanggal berikutnya: set next.items_metadata[key].sisa_kemarin = newValue
         const nextTanggal = getNextTanggal(tanggal);
         if (nextTanggal) {
-          const { data: nextRows, error: nextError } = await supabase
-            .from("fafifa-costing")
-            .select("id, items_metadata, items")
+          const { data: nextRows, error: nextErr } = await supabase
+            .from("fafifa_costing")
+            .select("id, items, items_metadata, tanggal")
             .eq("tanggal", nextTanggal)
             .limit(1);
 
-          if (!nextError && nextRows && (nextRows as any[]).length > 0) {
-            const nextRow = (nextRows as any[])[0];
-            const nextItemsMetadata = { ...(nextRow.items_metadata ?? {}) };
-            if (!nextItemsMetadata[key]) nextItemsMetadata[key] = {};
-            nextItemsMetadata[key].sisa_kemarin = newValue;
+          if (nextErr) throw nextErr;
 
-            const stokBaru = Number(nextItemsMetadata[key].input_baru ?? 0);
-            const totalStokBaru = Number(nextItemsMetadata[key].sisa_kemarin ?? 0) + stokBaru;
-            const nextItems = { ...(nextRow.items ?? {}), [key]: totalStokBaru };
+          const nextRow = nextRows?.[0];
+          if (nextRow) {
+            const nextMeta = { ...(nextRow.items_metadata ?? {}) };
+            const nextItems = { ...(nextRow.items ?? {}) };
 
-            const { error: nextUpdateError } = await supabase
-              .from("fafifa-costing")
+            const prevMeta = nextMeta[key] ?? {};
+            nextMeta[key] = {
+              ...prevMeta,
+              sisa_kemarin: newValue,
+            };
+
+            const inputBaruBesok = Number(nextMeta[key].input_baru ?? 0);
+            nextItems[key] = inputBaruBesok + newValue;
+
+            const { error: updateErr } = await supabase
+              .from("fafifa_costing")
               .update({
-                items_metadata: nextItemsMetadata,
+                items_metadata: nextMeta,
                 items: nextItems,
               })
               .eq("id", nextRow.id);
 
-            if (nextUpdateError) throw nextUpdateError;
+            if (updateErr) throw updateErr;
           }
         }
       }
 
       toast.dismiss(toastId);
-      toast.success("✅ Perubahan tersimpan");
-      onUpdate();
+      toast.success("✅ Perubahan berhasil disimpan");
       setEditing(null);
+      onUpdate();
     } catch (err) {
-      console.error(err);
+      console.error("❌ Gagal menyimpan perubahan:", err);
       toast.dismiss(toastId);
-      toast.error("Gagal menyimpan ke cloud");
+      toast.error("❌ Gagal menyimpan perubahan.");
     }
   };
 
-  const keydown = (e: KeyboardEvent<HTMLInputElement>) => {
+  const keyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") simpanEdit();
     if (e.key === "Escape") setEditing(null);
   };
 
+  const handleDeleteTanggal = async () => {
+    const confirmDelete = window.confirm(`⚠️ Yakin ingin menghapus data stok tanggal ${tanggal}?`);
+    if (!confirmDelete) return;
+
+    const { error } = await supabase
+      .from("fafifa_costing")
+      .delete()
+      .eq("tanggal", tanggal);
+
+    if (error) {
+      toast.error(`❌ Gagal menghapus data tanggal ${tanggal}: ${error.message}`);
+    } else {
+      toast.success(`🗑️ Data stok tanggal ${tanggal} berhasil dihapus.`);
+      onUpdate();
+    }
+  };
+
   return (
-    <div className="border p-4 mb-4 rounded bg-white shadow-sm">
-      {/* Header tanggal dan tombol aksi */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-3 gap-3">
-        <div className="flex-1 flex flex-col md:flex-row md:items-center gap-4">
-          <p className="font-semibold whitespace-nowrap">Tanggal: {tanggal}</p>
-        </div>
-        <div className="flex gap-2">
-          {/* Tombol yang hilang di kode Anda, tapi saya tambahkan karena fungsionalitasnya ada */}
-          <button
-            onClick={() => onEditGabungan(row, 'semua')} // Ganti 'semua' dengan key yang sesuai jika diperlukan
-            className="p-2 text-lg text-blue-600 hover:bg-blue-100 rounded-full"
-            title="Edit Stok Gabungan"
-          >
-            ⚙️
-          </button>
-          <button
-            onClick={() => onInputSisa(row)}
-            className="p-2 text-lg text-amber-600 hover:bg-amber-100 rounded-full"
-            title="Input Sisa"
-          >
-            📦
-          </button>
-          <button
-            onClick={() => {
-              if (confirm(`Hapus data tanggal ${tanggal}?`)) {
-                onHapus(row.id as number, tanggal);
-              }
-            }}
-            className="p-2 text-lg text-red-600 hover:bg-red-100 rounded-full"
-            title="Hapus"
-          >
-            🗑️
-          </button>
-        </div>
-      </div>
-
-      {/* Input Makan Kue */}
-      <div className="flex items-center gap-2 mb-2">
-        <span className="font-semibold">Makan Kue:</span>
-        {editMakanKue ? (
-          <>
-            <input
-              type="number"
-              min={0}
-              className="w-20 border-b-2 border-gray-300 focus:border-blue-500 outline-none px-2 py-1"
-              value={makanKueInput}
-              onChange={(e) => setMakanKueInput(Number(e.target.value))}
-              onKeyDown={(ev) => ev.key === "Enter" && simpanMakanKue()}
-            />
-            <button onClick={simpanMakanKue} className="px-2 py-1 bg-blue-600 text-white rounded">
-              Submit
-            </button>
-            <button
-              onClick={() => {
-                setEditMakanKue(false);
-                setMakanKueInput(makanKueValue);
-              }}
-              className="px-2 py-1 bg-gray-300 text-gray-700 rounded"
-            >
-              Batal
-            </button>
-          </>
-        ) : (
-          <>
-            <span className="ml-2">{makanKueValue} pcs</span>
-            <button
-              onClick={() => setEditMakanKue(true)}
-              className="ml-2 p-1 text-blue-600 hover:bg-blue-100 rounded"
-              title="Edit Makan Kue"
-            >
-              ✏️
-            </button>
-          </>
-        )}
-      </div>
-
-      {/* Tabel data stok */}
-      <div className="grid grid-cols-5 font-semibold text-sm text-gray-600 mb-1 px-2 text-right">
+    <div className="border rounded p-4 mb-3 bg-white shadow-sm">
+      <h2 className="font-semibold mb-2">Tanggal: {tanggal}</h2>
+      <div className="grid grid-cols-5 font-semibold text-sm mb-1 text-right">
         <span className="text-left">Jenis Kue</span>
         <span>Sisa Kemarin</span>
         <span>Stok Baru</span>
@@ -268,91 +202,90 @@ export default function TanggalCard({ row, onInputSisa, onHapus, onUpdate, onEdi
         <span>Sisa Hari Ini</span>
       </div>
 
-      <div className="space-y-1">
-        {KUE_LIST.map((k) => {
-          const stokVal = Number(items?.[k.key] ?? 0);
-          const sisaVal = Number(sisa?.[k.key] ?? 0);
-          const meta = items_metadata?.[k.key] ?? {};
-          const sisaKemarin = Number(meta?.sisa_kemarin ?? 0);
-          const stokBaru = Number(meta?.input_baru ?? (stokVal - sisaKemarin));
-          const editSisa = editing?.type === "sisa" && editing.key === k.key;
-          const editStokBaru = editing?.type === "stok_baru" && editing.key === k.key;
+      {KUE_LIST.map((kue) => {
+        const meta = items_metadata?.[kue.key] ?? {};
+        const sisaKemarin = Number(meta?.sisa_kemarin ?? 0);
+        const stokBaru = Number(meta?.input_baru ?? 0);
+        const totalStok = Number(items?.[kue.key] ?? sisaKemarin + stokBaru);
+        const sisaHariIni = Number(sisa?.[kue.key] ?? 0);
 
-          return (
-            <div key={k.key} className="grid grid-cols-5 bg-gray-50 px-3 py-2 rounded items-center text-right">
-              <span className="text-left">{k.label}</span>
-              <span className="text-gray-500 cursor-help" title="Sisa dari hari sebelumnya.">
-                {sisaKemarin}
-              </span>
+        const editingBaru = editing?.type === "stok_baru" && editing.key === kue.key;
+        const editingSisa = editing?.type === "sisa" && editing.key === kue.key;
 
-              {/* Edit Stok Baru */}
-              <span
-                className="cursor-pointer"
-                onDoubleClick={() => {
-                  setEditing({ type: "stok_baru", key: k.key });
-                  setValue(String(stokBaru));
-                }}
-              >
-                {editStokBaru ? (
-                  <input
-                    autoFocus
-                    type="number"
-                    className="w-16 text-right border rounded px-1 mx-auto"
-                    value={value}
-                    onChange={(e) => setValue(e.target.value)}
-                    onKeyDown={keydown}
-                    onBlur={simpanEdit}
-                  />
-                ) : (
-                  stokBaru
-                )}
-              </span>
+        return (
+          <div
+            key={kue.key}
+            className="grid grid-cols-5 items-center text-right text-sm py-1 bg-gray-50 px-2 rounded mb-1"
+          >
+            <span className="text-left">{kue.label}</span>
+            <span>{sisaKemarin}</span>
 
-              <span className="font-bold">{stokVal}</span>
+            <span
+              onDoubleClick={() => {
+                setEditing({ type: "stok_baru", key: kue.key });
+                setValue(String(stokBaru));
+              }}
+              className="cursor-pointer"
+            >
+              {editingBaru ? (
+                <input
+                  autoFocus
+                  type="number"
+                  className="border px-1 w-16 text-right"
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  onKeyDown={keyDown}
+                  onBlur={simpanEdit}
+                />
+              ) : (
+                stokBaru
+              )}
+            </span>
 
-              {/* Edit Sisa */}
-              <span
-                className="cursor-pointer"
-                onDoubleClick={() => {
-                  setEditing({ type: "sisa", key: k.key });
-                  setValue(String(sisaVal));
-                }}
-              >
-                {editSisa ? (
-                  <input
-                    autoFocus
-                    type="number"
-                    className="w-16 text-right border rounded px-1 mx-auto"
-                    value={value}
-                    onChange={(e) => setValue(e.target.value)}
-                    onKeyDown={keydown}
-                    onBlur={simpanEdit}
-                  />
-                ) : (
-                  sisaVal
-                )}
-              </span>
-            </div>
-          );
-        })}
+            <span className="font-bold">{totalStok}</span>
 
-        <div className="grid grid-cols-5 font-bold bg-blue-50 px-3 py-2 rounded mt-1 text-right">
-          <span className="text-left">Total</span>
-          <span>{totalSisaKemarin}</span>
-          <span>{totalStokBaru}</span>
-          <span>{totalStok}</span>
-          <span className="text-blue-700">{totalSisa}</span>
-        </div>
+            <span
+              onDoubleClick={() => {
+                setEditing({ type: "sisa", key: kue.key });
+                setValue(String(sisaHariIni));
+              }}
+              className="cursor-pointer"
+            >
+              {editingSisa ? (
+                <input
+                  autoFocus
+                  type="number"
+                  className="border px-1 w-16 text-right"
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  onKeyDown={keyDown}
+                  onBlur={simpanEdit}
+                />
+              ) : (
+                sisaHariIni
+              )}
+            </span>
+          </div>
+        );
+      })}
+
+      {/* ✅ TAMBAHAN: Baris Total */}
+      <div className="grid grid-cols-5 items-center text-right text-sm py-2 bg-blue-50 font-semibold border-t border-blue-200 mt-2 px-2 rounded">
+        <span className="text-left">TOTAL</span>
+        <span className="text-blue-700">{totals.totalSisaKemarin}</span>
+        <span className="text-blue-700">{totals.totalStokBaru}</span>
+        <span className="text-blue-700 font-bold">{totals.totalStok}</span>
+        <span className="text-blue-700">{totals.totalSisaHariIni}</span>
       </div>
 
-      {/* Total bawah */}
-      <div className="mt-4 border-t pt-2">
-        <div className="grid grid-cols-2">
-          <span className="font-semibold">Total Terjual/Terpakai Hari Ini:</span>
-          <span className="text-right font-bold text-lg text-green-700">
-            {totalKeseluruhan.toLocaleString("id-ID")} pcs
-          </span>
-        </div>
+      <div className="flex justify-end mt-4">
+        <button
+          type="button"
+          onClick={handleDeleteTanggal}
+          className="text-red-600 hover:text-red-800 px-4 py-2 rounded-lg border border-red-300 text-sm"
+        >
+          🗑️ Hapus Stok Tanggal Ini
+        </button>
       </div>
     </div>
   );

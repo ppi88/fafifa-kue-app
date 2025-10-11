@@ -8,7 +8,7 @@ import type { LaporanRecord } from "./types";
 import { KUE_LIST } from "../InputStokKue";
 
 export default function LaporanStokKue() {
-  const { data, loading, getData, hapusData } = useLaporanData();
+  const { data, loading, getData, hapusData, updateSisaKemarinNextDay } = useLaporanData();
 
   const [modalType, setModalType] = useState<"stok" | "sisa" | null>(null);
   const [selected, setSelected] = useState<LaporanRecord | null>(null);
@@ -19,12 +19,10 @@ export default function LaporanStokKue() {
     getData(filterDate);
   }, [filterDate]);
 
-  // Selalu refresh data setelah update
   const handleUpdateInline = () => {
     getData(filterDate);
   };
 
-  // Selalu refresh data setelah hapus
   const handleDelete = async (id: number, tanggal: string) => {
     await hapusData(id, tanggal);
     getData(filterDate);
@@ -83,12 +81,30 @@ export default function LaporanStokKue() {
         visible={!!modalType}
         onClose={() => setModalType(null)}
         selected={selected}
-        onSuccess={() => { setModalType(null); getData(filterDate); }}
+        onSuccess={async (updatedRow) => {
+          setModalType(null);
+          await getData(filterDate);
+
+          // ⬇️ update otomatis ke hari berikutnya
+          if (updatedRow) {
+            await updateSisaKemarinNextDay(updatedRow.tanggal, updatedRow.items_metadata);
+            await getData(filterDate);
+          }
+        }}
       />
       <ModalEditGabungan
         visible={!!editGabunganData}
         onClose={() => setEditGabunganData(null)}
-        onSuccess={() => { setEditGabunganData(null); getData(filterDate); }}
+        onSuccess={async (updatedRow) => {
+          setEditGabunganData(null);
+          await getData(filterDate);
+
+          // ⬇️ update otomatis ke hari berikutnya
+          if (updatedRow) {
+            await updateSisaKemarinNextDay(updatedRow.tanggal, updatedRow.items_metadata);
+            await getData(filterDate);
+          }
+        }}
         data={editGabunganData}
       />
     </div>

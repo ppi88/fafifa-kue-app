@@ -1,103 +1,142 @@
-// src/pages/LaporanStokKue/hooks/useLaporanData.ts
-
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { supabase } from "../../../lib/supabaseClient";
-import { deleteEntry, loadEntries } from "../../../utils/storage"; // Import loadEntries()
+import { deleteEntry } from "../../../utils/storage";
 import { deleteStokCloud } from "../../../utils/supabaseStorage";
-import type { LaporanRecord } from "../types"; // Asumsikan LaporanRecord sudah benar dan memiliki created_at
+import type { LaporanRecord } from "../types";
 
-/**
- * 🔹 Hook: useLaporanData
- * Mengambil, memfilter, dan menghapus data laporan stok kue.
- * - Sinkronisasi dengan Supabase (cloud)
- * - Fallback ke localStorage jika offline
- */
 export function useLaporanData() {
   const [data, setData] = useState<LaporanRecord[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
 
-  /**
-   * 🔸 Ambil data laporan (dari Supabase, fallback ke lokal)
-   */
   const getData = async (filterDate?: string) => {
     setLoading(true);
-    try {
-      let query = supabase
-        .from("fafifa-costing")
-        .select("*")
-        .order("tanggal", { ascending: false });
+    let query = supabase
+      .from("fafifa_costing")
+      .select("*")
+      .order("tanggal", { ascending: false });
 
-      if (filterDate) query = query.eq("tanggal", filterDate);
-
-      const { data: res, error } = await query;
-
-      if (error) throw error;
-
-      setData((res || []) as LaporanRecord[]);
-    } catch (err) {
-      console.error("Gagal ambil data cloud:", err);
-      toast.error("⚠️ Gagal mengambil data dari cloud. Menampilkan data lokal.");
-
-      // PERBAIKAN: Kita akan mengasumsikan 'loadEntries' sekarang mengembalikan 
-      // data yang secara struktural (minimal) kompatibel, karena kita telah 
-      // memperbaiki masalah 'created_at' di 'utils/storage.ts'.
-      // TS2352 seharusnya hilang. Kita hapus cast 'as LaporanRecord[]' 
-      // untuk keamanan, karena loadEntries mengembalikan StokEntry[].
-      // Namun, jika kita ingin tetap menggunakan LaporanRecord[], kita harus yakin
-      // bahwa LaporanRecord adalah superset yang benar dari StokEntry.
-      
-      // Untuk menghilangkan error TS2352, kita tambahkan konversi ke unknown
-      // sebelum ke LaporanRecord (sebuah hack, tapi sering digunakan jika type mismatch
-      // dan Anda yakin strukturnya benar). Atau, kita perbaiki LaporanRecord.
-
-      // Cara yang lebih baik adalah membiarkan `loadEntries()` mengembalikan 
-      // StokEntry[] dan kita perlu memprosesnya agar menjadi LaporanRecord. 
-      // Namun, karena ini hanya fallback, kita gunakan casting yang lebih aman:
-      
-      const local = loadEntries(); // loadEntries() mengembalikan StokEntry[]
-      // Jika data lokal perlu diproses menjadi LaporanRecord, pemrosesan harus dilakukan di sini.
-      // Untuk saat ini, kita akan menggunakan casting aman `as unknown as LaporanRecord[]`
-      // jika error TS2352 masih muncul, atau kita asumsikan perbaikan `created_at` sudah cukup.
-      setData((local || []) as unknown as LaporanRecord[]);
-    } finally {
-      setLoading(false);
+    if (filterDate) {
+      query = query.eq("tanggal", filterDate);
     }
+
+    const { data: res, error } = await query;
+
+    if (error) {
+      toast.error("⚠️  Gagal mengambil data laporan.");
+      setData([]);
+    } else {
+      setData(res || []);
+    }
+    setLoading(false);
   };
 
-  /**
-   * 🔸 Hapus data laporan (cloud + lokal)
-   */
   const hapusData = async (id: number, tanggal: string) => {
     if (!window.confirm(`Yakin hapus data tanggal ${tanggal}?`)) return;
 
-    // 🔹 Hapus dari Supabase
-    try {
-      const { error } = await supabase
-        .from("fafifa-costing")
-        .delete()
-        .eq("id", id);
+    const { error } = await supabase
+      .from("fafifa_costing")
+      .delete()
+      .eq("id", id);
 
-      if (error) throw error;
-    } catch (err) {
-      console.error("Gagal hapus di Supabase:", err);
-      toast.error("❌ Gagal menghapus data dari cloud.");
+    if (error) {
+      toast.error("Gagal menghapus data");
       return;
     }
 
-    // 🔹 Hapus juga dari local storage dan cloud storage (Supabase Storage)
     try {
-      await Promise.allSettled([
-        Promise.resolve(deleteEntry(id)),
-        Promise.resolve(deleteStokCloud(id)),
-      ]);
-    } catch (err) {
-      console.warn("Peringatan: gagal hapus cache lokal", err);
-    }
+      deleteEntry && deleteEntry(tanggal);
+      deleteStokCloud && deleteStokCloud(tanggal);
+    } catch (e) {}
 
-    // 🔹 Update data di state
     setData((prev) => prev.filter((row) => row.id !== id));
-    toast.success("🗑️ Data berhasil dihapus.");
+    toast.success("Data berhasil dihapus");
+  };
+
+  const updateSisaKemarinNextDay = async (
+    currentDate: string,
+    items_metadata: any
+  ) => {
+    try {
+      const d = new Date(currentDate);
+      d.setDate(d.getDate() + 1);
+      const nextDate = d.toISOString().split("T")[0];
+
+      const { data: nextRows, error: fetchErr } = await supabase
+        .from("fafifa_costing")
+        .select("*")
+        .eq("tanggal", nextDate);
+
+      if (fetchErr) throw fetchErr;
+      if (!nextRows || nextRows.length === 0) return;
+
+      const nextRow = nextRows[0];
+      const updatedItems = { ...(nextRow.items_metadata || {}) };
+
+      Object.keys(items_metadata || {}).forEach((kueKey) => {
+        if (!updatedItems[kueKey]) updatedItems[kueKey] = {};
+        updatedItems[kueKey].sisa_kemarin = items_metadata[kueKey]?.sisa_hari_ini ?? 0;
+      });
+
+      const { error: updateErr } = await supabase
+        .from("fafifa_costing")
+        .update({ items_metadata: updatedItems })
+        .eq("id", nextRow.id);
+
+      if (updateErr) throw updateErr;
+
+      toast.success(`✅ Sisa Kemarin untuk ${nextDate} telah diperbarui`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Gagal update sisa kemarin pada tanggal berikutnya");
+    }
+  };
+
+  const sinkronkanSisaKemarinHariIni = async (tanggalHariIni: string) => {
+    try {
+      const d = new Date(tanggalHariIni);
+      d.setDate(d.getDate() - 1);
+      const prevDate = d.toISOString().split("T")[0];
+
+      const { data: prevRows, error: errPrev } = await supabase
+        .from("fafifa_costing")
+        .select("sisa")
+        .eq("tanggal", prevDate)
+        .limit(1);
+
+      if (errPrev) throw errPrev;
+      const sisaKemarin = prevRows?.[0]?.sisa;
+      if (!sisaKemarin) return;
+
+      const { data: hariIniRows, error: errToday } = await supabase
+        .from("fafifa_costing")
+        .select("id, items_metadata")
+        .eq("tanggal", tanggalHariIni)
+        .limit(1);
+
+      if (errToday) throw errToday;
+      const hariIni = hariIniRows?.[0];
+      if (!hariIni) return;
+
+      const updatedMeta = { ...(hariIni.items_metadata ?? {}) };
+
+      Object.keys(sisaKemarin).forEach((key) => {
+        if (!updatedMeta[key]) updatedMeta[key] = {};
+        updatedMeta[key].sisa_kemarin = sisaKemarin[key];
+      });
+
+      const { error: updateErr } = await supabase
+        .from("fafifa_costing")
+        .update({ items_metadata: updatedMeta })
+        .eq("id", hariIni.id);
+
+      if (updateErr) throw updateErr;
+
+      toast.success(`✅ Sisa Kemarin di tanggal ${tanggalHariIni} telah disinkronkan`);
+    } catch (err) {
+      console.error("❌ Gagal sinkronkan sisa_kemarin:", err);
+      toast.error("Gagal sinkronkan sisa_kemarin ke tanggal hari ini");
+    }
   };
 
   return {
@@ -106,5 +145,7 @@ export function useLaporanData() {
     getData,
     hapusData,
     setData,
+    updateSisaKemarinNextDay,
+    sinkronkanSisaKemarinHariIni, // ⬅️ fungsi baru untuk sinkronisasi mundur
   };
 }

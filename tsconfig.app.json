@@ -8,6 +8,14 @@
     "types": ["vite/client"],
     "skipLibCheck": true,
 
+    /* BARU: Konfigurasi Path Alias */
+    "baseUrl": "./",
+    "paths": {
+      // Ini memungkinkan kita menggunakan import seperti '@/types/LaporanRecord.ts'
+      "@/*": ["./src/*"] 
+    },
+    /* AKHIR: Konfigurasi Path Alias */
+
     /* Bundler mode */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
