@@ -36,6 +36,12 @@ export interface LaporanRecord {
   // Jumlah yang terjual (opsional)
   terjual?: Record<string, number>;
 
+  // 🆕 Kolom tambahan: jumlah total kue rusak/dimakan hari itu
+  rusak_dimakan?: number;
+
+  // 🆕 Kolom opsional: catatan penjelasan (contoh: "2 rusak, 1 dimakan")
+  catatan_rusak_dimakan?: string;
+
   // Timestamp dibuat di sistem
   created_at: string;
 }

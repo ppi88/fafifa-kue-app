@@ -20,7 +20,7 @@ export default function InputSisaKue({
   defaultItems,
   onSuccess,
 }: Props) {
-  const [tanggal, setTanggal] = useState(defaultTanggal || "");
+  const [tanggal] = useState(defaultTanggal || "");
   const [sisa, setSisa] = useState<Record<string, number>>({});
   const [items, setItems] = useState<Record<string, number>>(defaultItems || {});
   const [metadata, setMetadata] = useState<Record<string, any>>({});
@@ -43,51 +43,48 @@ export default function InputSisaKue({
 
       const sisaHariKemarin = data.sisa;
 
-      setMetadata((prev) => {
-        const updated = { ...prev };
-        KUE_LIST.forEach((k) => {
-          if (!updated[k.key]) updated[k.key] = {};
-          updated[k.key].sisa_kemarin = sisaHariKemarin[k.key] ?? 0;
-        });
-        return updated;
+      // Update metadata dan items sekaligus
+      const newMetadata: Record<string, any> = {};
+      const newItems: Record<string, number> = {};
+
+      KUE_LIST.forEach((k) => {
+        const sisaKemarin = sisaHariKemarin[k.key] ?? 0;
+        const inputBaru = defaultItems[k.key] ?? 0;
+
+        newMetadata[k.key] = {
+          sisa_kemarin: sisaKemarin,
+          input_baru: inputBaru,
+        };
+
+        newItems[k.key] = sisaKemarin + inputBaru;
       });
 
-      // Optional: langsung hitung items (total_stok)
-      setItems((prev) => {
-        const newItems = { ...prev };
-        KUE_LIST.forEach((k) => {
-          const stokBaru = newItems[k.key] ?? 0;
-          const sisaKemarin = sisaHariKemarin[k.key] ?? 0;
-          newItems[k.key] = stokBaru + sisaKemarin;
-        });
-        return newItems;
-      });
+      setMetadata(newMetadata);
+      setItems(newItems);
     }
 
     if (tanggal) fetchData();
-  }, [tanggal]);
+  }, [tanggal, defaultItems]);
 
   const handleChange = (type: "sisa" | "input_baru", key: string, val: number) => {
     if (type === "sisa") {
       setSisa((prev) => ({ ...prev, [key]: val }));
     } else {
       setMetadata((prev) => {
-        const prevData = prev[key] ?? {};
-        const sisaKemarin = prevData.sisa_kemarin ?? 0;
-        return {
-          ...prev,
-          [key]: {
-            ...prevData,
-            input_baru: val,
-          },
+        const prevMeta = prev[key] ?? { sisa_kemarin: 0 };
+        const updatedMeta = {
+          ...prevMeta,
+          input_baru: val,
         };
-      });
 
-      setItems((prev) => {
-        const sisaKemarin = metadata[key]?.sisa_kemarin ?? 0;
+        setItems((prevItems) => ({
+          ...prevItems,
+          [key]: updatedMeta.sisa_kemarin + val,
+        }));
+
         return {
           ...prev,
-          [key]: val + sisaKemarin,
+          [key]: updatedMeta,
         };
       });
     }

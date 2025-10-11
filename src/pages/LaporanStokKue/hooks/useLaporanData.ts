@@ -9,8 +9,10 @@ export function useLaporanData() {
   const [data, setData] = useState<LaporanRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // ✅ Ambil data laporan, bisa difilter berdasarkan tanggal
   const getData = async (filterDate?: string) => {
     setLoading(true);
+
     let query = supabase
       .from("fafifa_costing")
       .select("*")
@@ -23,14 +25,16 @@ export function useLaporanData() {
     const { data: res, error } = await query;
 
     if (error) {
-      toast.error("⚠️  Gagal mengambil data laporan.");
+      toast.error("⚠️ Gagal mengambil data laporan.");
       setData([]);
     } else {
       setData(res || []);
     }
+
     setLoading(false);
   };
 
+  // ✅ Hapus data berdasarkan ID, termasuk dari local storage dan cloud
   const hapusData = async (id: number, tanggal: string) => {
     if (!window.confirm(`Yakin hapus data tanggal ${tanggal}?`)) return;
 
@@ -40,19 +44,22 @@ export function useLaporanData() {
       .eq("id", id);
 
     if (error) {
-      toast.error("Gagal menghapus data");
+      toast.error("❌ Gagal menghapus data");
       return;
     }
 
     try {
-      deleteEntry && deleteEntry(tanggal);
-      deleteStokCloud && deleteStokCloud(tanggal);
-    } catch (e) {}
+      deleteEntry?.(id);
+      deleteStokCloud?.(id);
+    } catch (e) {
+      console.warn("⚠️ Gagal hapus dari storage:", e);
+    }
 
     setData((prev) => prev.filter((row) => row.id !== id));
-    toast.success("Data berhasil dihapus");
+    toast.success(`✅ Data tanggal ${tanggal} berhasil dihapus`);
   };
 
+  // ✅ Update sisa_kemarin ke tanggal berikutnya setelah simpan
   const updateSisaKemarinNextDay = async (
     currentDate: string,
     items_metadata: any
@@ -75,7 +82,8 @@ export function useLaporanData() {
 
       Object.keys(items_metadata || {}).forEach((kueKey) => {
         if (!updatedItems[kueKey]) updatedItems[kueKey] = {};
-        updatedItems[kueKey].sisa_kemarin = items_metadata[kueKey]?.sisa_hari_ini ?? 0;
+        updatedItems[kueKey].sisa_kemarin =
+          items_metadata[kueKey]?.sisa_hari_ini ?? 0;
       });
 
       const { error: updateErr } = await supabase
@@ -87,11 +95,12 @@ export function useLaporanData() {
 
       toast.success(`✅ Sisa Kemarin untuk ${nextDate} telah diperbarui`);
     } catch (err) {
-      console.error(err);
+      console.error("❌ Gagal update sisa_kemarin:", err);
       toast.error("Gagal update sisa kemarin pada tanggal berikutnya");
     }
   };
 
+  // ✅ Sinkronkan sisa_kemarin ke hari ini dari tanggal sebelumnya
   const sinkronkanSisaKemarinHariIni = async (tanggalHariIni: string) => {
     try {
       const d = new Date(tanggalHariIni);
@@ -132,7 +141,9 @@ export function useLaporanData() {
 
       if (updateErr) throw updateErr;
 
-      toast.success(`✅ Sisa Kemarin di tanggal ${tanggalHariIni} telah disinkronkan`);
+      toast.success(
+        `✅ Sisa Kemarin di tanggal ${tanggalHariIni} telah disinkronkan`
+      );
     } catch (err) {
       console.error("❌ Gagal sinkronkan sisa_kemarin:", err);
       toast.error("Gagal sinkronkan sisa_kemarin ke tanggal hari ini");
@@ -146,6 +157,6 @@ export function useLaporanData() {
     hapusData,
     setData,
     updateSisaKemarinNextDay,
-    sinkronkanSisaKemarinHariIni, // ⬅️ fungsi baru untuk sinkronisasi mundur
+    sinkronkanSisaKemarinHariIni,
   };
 }

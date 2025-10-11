@@ -5,7 +5,7 @@ import RecapList from "./components/RecapList";
 import { useInputStok } from "./hooks/useInputStok";
 import type { LaporanRecord } from "./types";
 
-// ✅ 1. DEFINISIKAN DAN EKSPOR KUE_LIST DI SINI. Ini adalah sumber kebenaran.
+// ✅ Sumber kebenaran jenis kue
 export const KUE_LIST = [
   { key: "boluKukus", label: "Bolu Kukus" },
   { key: "rotiGabin", label: "Roti Gabin" },
@@ -31,7 +31,6 @@ export default function InputStokKue({
   const {
     tanggal,
     stok,
-    sisaKemarin,
     entries,
     isOnline,
     saving,
@@ -44,7 +43,7 @@ export default function InputStokKue({
 
   useEffect(() => {
     if (defaultTanggal) setTanggal(defaultTanggal);
-    if (defaultItems && applyDefaultItems) applyDefaultItems(defaultItems);
+    if (defaultItems) applyDefaultItems(defaultItems);
   }, [defaultTanggal, defaultItems, setTanggal, applyDefaultItems]);
 
   const laporanEntries: LaporanRecord[] = entries ?? [];
@@ -54,7 +53,6 @@ export default function InputStokKue({
       <StockForm
         tanggal={tanggal}
         stok={stok}
-        sisaKemarin={sisaKemarin}
         saving={saving}
         onTanggalChange={setTanggal}
         onItemChange={handleChange}
@@ -70,7 +68,6 @@ export default function InputStokKue({
         <StockForm
           tanggal={tanggal}
           stok={stok}
-          sisaKemarin={sisaKemarin}
           saving={saving}
           onTanggalChange={setTanggal}
           onItemChange={handleChange}

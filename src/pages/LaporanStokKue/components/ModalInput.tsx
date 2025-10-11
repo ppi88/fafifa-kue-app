@@ -1,5 +1,3 @@
-// src/pages/LaporanStokKue/components/ModalInput.tsx (Versi Bersih & Siap Pakai)
-
 import { Suspense, lazy, useEffect } from "react";
 import type { LaporanRecord } from "../types";
 
@@ -71,6 +69,7 @@ export default function ModalInput({
               <LazyInputSisaForm
                 key="form-sisa"
                 defaultTanggal={selected?.tanggal ?? ""}
+                defaultItems={selected?.items ?? {}} // ✅ Tambahkan ini
                 onSuccess={onSuccess}
               />
             )}

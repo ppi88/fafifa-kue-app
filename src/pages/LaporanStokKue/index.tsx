@@ -4,14 +4,11 @@ import TanggalCard from "./components/TanggalCard";
 import ModalInput from "./components/ModalInput";
 import ModalEditGabungan from "./components/ModalEditGabungan";
 import { useLaporanData } from "./hooks/useLaporanData";
-import type { LaporanRecord } from "./types";
-import { KUE_LIST } from "../InputStokKue";
 
 export default function LaporanStokKue() {
-  const { data, loading, getData, hapusData, updateSisaKemarinNextDay } = useLaporanData();
+  const { data, loading, getData, hapusData } = useLaporanData();
 
   const [modalType, setModalType] = useState<"stok" | "sisa" | null>(null);
-  const [selected, setSelected] = useState<LaporanRecord | null>(null);
   const [editGabunganData, setEditGabunganData] = useState<any | null>(null);
   const [filterDate, setFilterDate] = useState<string>("");
 
@@ -28,20 +25,6 @@ export default function LaporanStokKue() {
     getData(filterDate);
   };
 
-  const openEditGabunganModal = (row: LaporanRecord, kue_key: string) => {
-    const prevDateIndex = data.findIndex(d => d.id === row.id) + 1;
-    const prevData = data[prevDateIndex];
-
-    setEditGabunganData({
-      tanggal: row.tanggal,
-      tanggal_sebelumnya: prevData?.tanggal || null,
-      kue_key: kue_key,
-      kue_label: KUE_LIST.find(k => k.key === kue_key)?.label || '',
-      input_baru: row.items_metadata?.[kue_key]?.input_baru ?? 0,
-      sisa_kemarin: row.items_metadata?.[kue_key]?.sisa_kemarin ?? 0,
-    });
-  };
-
   return (
     <div className="p-4">
       <HeaderBar
@@ -56,54 +39,37 @@ export default function LaporanStokKue() {
         <p className="text-center mt-10">Memuat data...</p>
       ) : data.length === 0 ? (
         <p className="text-center mt-4 text-gray-600">
-          {filterDate ? `Tidak ada data untuk tanggal ${filterDate}.` : "Tidak ada data stok."}
+          {filterDate
+            ? `Tidak ada data untuk tanggal ${filterDate}.`
+            : "Tidak ada data stok."}
         </p>
       ) : (
-        data.map((row, idx) => {
-          const next = data[idx + 1];
-          const totalPrev = next ? Object.values(next.sisa || {}).reduce((a, b) => a + (Number(b) || 0), 0) : 0;
-          return (
-            <TanggalCard
-              key={row.id}
-              row={row}
-              totalPrev={totalPrev}
-              onInputSisa={(r) => { setSelected(r); setModalType("sisa"); }}
-              onHapus={handleDelete}
-              onUpdate={handleUpdateInline}
-              onEditGabungan={openEditGabunganModal}
-            />
-          );
-        })
+        data.map((row) => (
+          <TanggalCard
+            key={row.id}
+            row={row}
+            onUpdate={handleUpdateInline}
+            onHapus={handleDelete}
+          />
+        ))
       )}
 
       <ModalInput
         type={modalType}
         visible={!!modalType}
         onClose={() => setModalType(null)}
-        selected={selected}
-        onSuccess={async (updatedRow) => {
+        onSuccess={() => {
           setModalType(null);
-          await getData(filterDate);
-
-          // ⬇️ update otomatis ke hari berikutnya
-          if (updatedRow) {
-            await updateSisaKemarinNextDay(updatedRow.tanggal, updatedRow.items_metadata);
-            await getData(filterDate);
-          }
+          getData(filterDate);
         }}
       />
+
       <ModalEditGabungan
         visible={!!editGabunganData}
         onClose={() => setEditGabunganData(null)}
-        onSuccess={async (updatedRow) => {
+        onSuccess={() => {
           setEditGabunganData(null);
-          await getData(filterDate);
-
-          // ⬇️ update otomatis ke hari berikutnya
-          if (updatedRow) {
-            await updateSisaKemarinNextDay(updatedRow.tanggal, updatedRow.items_metadata);
-            await getData(filterDate);
-          }
+          getData(filterDate);
         }}
         data={editGabunganData}
       />
