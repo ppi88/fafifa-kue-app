@@ -23,14 +23,6 @@ const formatTanggalIndonesia = (isoDate: string): string => {
   return `${days[date.getDay()]}, ${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
 };
 
-function getNextTanggal(currentTanggal: string): string | null {
-  if (!currentTanggal) return null;
-  const date = new Date(currentTanggal);
-  if (Number.isNaN(date.getTime())) return null;
-  date.setDate(date.getDate() + 1);
-  return date.toISOString().split("T")[0];
-}
-
 interface Props {
   row: LaporanRecord;
   onUpdate: () => void;
